@@ -1,0 +1,76 @@
+#!/bin/bash
+
+parsingFunctions=$(cat $1 | srcml -l C++ --xpath="//src:function_decl/src:name" -S | xargs -I^ echo .=\"^\" | paste -sd "&" - | sed 's|&| or |g')
+
+cat << EOF
+<style>
+*{
+    font-weight : 900;
+}
+expr_stmt > expr[concern='parsing'], *[concern='parsing'] {
+    color : red;
+    font-weight : 900;
+}
+expr_stmt > expr[nonconcern='nonparsing'], *[nonconcern='nonparsing'] {
+    color : black;
+    font-weight : 900;
+}
+</style>
+<pre>
+EOF
+
+# Expression statements whose first-level expressions are in that concern
+# Allows conditions,
+# Concern: srcFacts
+# declaration statements:
+#   Counters
+# expression statements
+#
+# expressions
+# conditions
+
+# Concern: srcML
+# declaration statements:
+#   Counters
+# expression statements
+#   literals
+#       "expr", "return", ...
+# expressions
+# conditions
+
+# Concern: XML Concepts/API
+# declaration statements:
+#   qName, localName, prefix,
+# expression statements
+# expressions
+# conditions
+
+cat $2 | srcml -l C++ --xmlns:concern="https://mlcollard/net/concern" --attribute "concern:concern=parsing" --xpath="\
+//src:decl_stmt \
+  [not(ancestor::src:function/src:name='refillContent')] \
+  [src:decl/src:name \
+    [.!='inEscape' and .!='files' and .!='valueWidth' and .!='finishTime' and .!='elapsedSeconds' and .!='MLOCPerSecond' and .!='version' and .!='url' and .!='startTime' and .!='totalBytes' and .!='loc' and .!='textSize' and not(contains(.,'Count')) and .!='uri' and .!='prefix' and .!='encoding' and .!='standalone' and .!='characters' and .!='comment' and .!='target' and .!='data' and .!='qName' and .!='localName' and .!='value']\
+  ] | \
+//src:if[contains(src:block/src:block_content/src:expr_stmt, 'cerr')] | \
+//src:expr_stmt \
+  [not(contains(.//src:name,'Count'))] \
+  [not(.//src:name='clog') and not(.//src:name='cout')][not(ancestor::src:function/src:name='refillContent')][not(src:expr/src:call/src:name='TRACE') and not(.//src:name='textSize') and not(.//src:name='loc')] |
+//src:condition[not(ancestor::src:function/src:name='refillContent')][.//src:name='content'] | \
+//src:if_stmt//src:if_stmt[not(contains(.//src:condition,'localName')) and not(ancestor::src:function/src:name='refillContent')] | \
+//src:decl_stmt/src:init/src:expr[.//src:name[.='content' or .='substr']] \
+" | sed 's|concern\:concern="parsing"|concern="parsing"|g' | \
+srcml -l C++ --xmlns:non="non" --attribute "non:nonconcern='nonparsing'" --xpath=" \
+//src:expr_stmt[.//src:name[.='TRACE' or $parsingFunctions]] | \
+//src:condition[.//src:name[$parsingFunctions]] | \
+//src:decl_stmt[src:decl/src:name[.='escapeValue' or .='uri' or .='qName' or .='prefix' or .='localName' or .='value']] | \
+//src:expr_stmt[src:expr//src:name='url'] | \
+//src:if[contains(src:condition//src:literal, 'url')] | \
+//src:if_stmt[.//src:condition//src:name='inEscape'] | \
+//src:comment[contains(.,'srcML')] | \
+//src:if_stmt[src:if/src:block/src:block_content/src:expr_stmt//src:name='cerr'] \
+" | \
+sed 's|non\:nonconcern="nonparsing"|nonconcern="nonparsing"|g'
+
+cat << EOF
+</pre>
+EOF
